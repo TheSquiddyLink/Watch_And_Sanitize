@@ -3,37 +3,40 @@ WATCH_DIR="/watch"
 
 sanitize_name() {
     local f="$1"
+    # Replace spaces with underscores
     f="${f// /_}"
+    # Remove unwanted characters
     f=$(echo "$f" | sed 's/[^A-Za-z0-9._-]//g')
     echo "$f"
 }
 
-find "$WATCH_DIR" -depth -mindepth 1 | while read -r ITEM; do
-    DIR=$(dirname "$ITEM")
-    BASE=$(basename "$ITEM")
-    CLEAN=$(sanitize_name "$BASE")
+rename_item() {
+    local ITEM="$1"
+    local DIR=$(dirname "$ITEM")
+    local BASE=$(basename "$ITEM")
+    local CLEAN=$(sanitize_name "$BASE")
+
     if [[ "$BASE" != "$CLEAN" ]]; then
-        echo "Renaming existing: $BASE → $CLEAN"
+        echo "Renaming: $BASE → $CLEAN"
         mv "$DIR/$BASE" "$DIR/$CLEAN"
     fi
+}
+
+# Rename existing items, deepest first
+find "$WATCH_DIR" -depth -mindepth 1 -print0 | while IFS= read -r -d '' ITEM; do
+    rename_item "$ITEM"
 done
 
-inotifywait -m -r -e create -e moved_to "$WATCH_DIR" --format '%w%f' |
-while read -r FILE; do
-    for i in {1..10}; do
-        size1=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
-        sleep 2
-        size2=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
-        [[ "$size1" -eq "$size2" ]] && break
-    done
-
-    if [[ -e "$FILE" ]]; then
-        DIR=$(dirname "$FILE")
-        BASE=$(basename "$FILE")
-        CLEAN=$(sanitize_name "$BASE")
-        if [[ "$BASE" != "$CLEAN" ]]; then
-            echo "Renaming new: $BASE → $CLEAN"
-            mv "$DIR/$BASE" "$DIR/$CLEAN"
+# Watch for new items
+inotifywait -m -r -e close_write -e create -e moved_to --format '%w%f' "$WATCH_DIR" | while read -r ITEM; do
+    if [[ -e "$ITEM" ]]; then
+        # If it's a directory, rename contents first
+        if [[ -d "$ITEM" ]]; then
+            find "$ITEM" -depth -mindepth 1 -print0 | while IFS= read -r -d '' SUBITEM; do
+                rename_item "$SUBITEM"
+            done
         fi
+        # Then rename the item itself (file or folder)
+        rename_item "$ITEM"
     fi
 done
