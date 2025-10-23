@@ -55,6 +55,9 @@ inotifywait -m -r -e close_write -e create -e moved_to --format '%w%f' "$WATCH_D
         done
     fi
     rename_item "$ITEM"
+    log "INFO" "Finished Renaming '$WATCH_DIR'" 
 done
+
+
 
 
