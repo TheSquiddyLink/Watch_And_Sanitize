@@ -42,13 +42,19 @@ done
 log "INFO" "Watching '$WATCH_DIR' for new files and folders..."
 
 inotifywait -m -r -e close_write -e create -e moved_to --format '%w%f' "$WATCH_DIR" | while read -r ITEM; do
-    if [[ -e "$ITEM" ]]; then
-        if [[ -d "$ITEM" ]]; then
-            log "INFO" "New directory detected: '$ITEM'. Renaming contents..."
-            find "$ITEM" -depth -mindepth 1 -print0 | while IFS= read -r -d '' SUBITEM; do
-                rename_item "$SUBITEM"
-            done
-        fi
-        rename_item "$ITEM"
+    if [[ -d "$ITEM" ]]; then
+        log "INFO" "New directory detected: '$ITEM'. Waiting for transfer to finish..."
+        for i in {1..10}; do
+            size1=$(du -sb "$ITEM" 2>/dev/null | cut -f1)
+            sleep 2
+            size2=$(du -sb "$ITEM" 2>/dev/null | cut -f1)
+            [[ "$size1" -eq "$size2" ]] && break
+        done
+        find "$ITEM" -depth -mindepth 1 -print0 | while IFS= read -r -d '' SUBITEM; do
+            rename_item "$SUBITEM"
+        done
     fi
+    rename_item "$ITEM"
 done
+
+
