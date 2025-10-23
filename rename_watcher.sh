@@ -8,32 +8,31 @@ sanitize_name() {
     echo "$f"
 }
 
-is_stable() {
-    local file="$1"
-    local size1 size2
-    size1=$(stat -c%s "$file" 2>/dev/null || echo 0)
-    sleep 2
-    size2=$(stat -c%s "$file" 2>/dev/null || echo 0)
-    [[ "$size1" -eq "$size2" ]]
-}
+find "$WATCH_DIR" -depth -mindepth 1 | while read -r ITEM; do
+    DIR=$(dirname "$ITEM")
+    BASE=$(basename "$ITEM")
+    CLEAN=$(sanitize_name "$BASE")
+    if [[ "$BASE" != "$CLEAN" ]]; then
+        echo "Renaming existing: $BASE → $CLEAN"
+        mv "$DIR/$BASE" "$DIR/$CLEAN"
+    fi
+done
 
 inotifywait -m -r -e create -e moved_to "$WATCH_DIR" --format '%w%f' |
 while read -r FILE; do
-    # Wait for file to finish writing
     for i in {1..10}; do
-        if is_stable "$FILE"; then
-            break
-        fi
-        sleep 1
+        size1=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
+        sleep 2
+        size2=$(stat -c%s "$FILE" 2>/dev/null || echo 0)
+        [[ "$size1" -eq "$size2" ]] && break
     done
 
-    # Sanitize and rename
-    if [[ -f "$FILE" ]]; then
+    if [[ -e "$FILE" ]]; then
         DIR=$(dirname "$FILE")
         BASE=$(basename "$FILE")
         CLEAN=$(sanitize_name "$BASE")
         if [[ "$BASE" != "$CLEAN" ]]; then
-            echo "Renaming: $BASE → $CLEAN"
+            echo "Renaming new: $BASE → $CLEAN"
             mv "$DIR/$BASE" "$DIR/$CLEAN"
         fi
     fi
